@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 )
 
 // Temporary struct to create Pokemon objects before adding SQL database
@@ -15,10 +16,10 @@ type Pokemon struct {
 // Added log.Fatal so that it sends an error if the server crashes
 func main() {
 	http.HandleFunc("/pokemon", handlePokemon)
+	http.HandleFunc("/pokemon/", handlePokemon) // Emulates "/pokemon/{id}" on a framework as this is a limitation of only using net/http
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
-// Why do I need to put writeHeader() underneath Header.Set()??? If I don't then it sends as plain text, not JSON
 func WriteJSON(w http.ResponseWriter, status int, v any) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -37,14 +38,22 @@ func handlePokemon(w http.ResponseWriter, r *http.Request) {
 	case "DELETE":
 		w.Write([]byte("This is a delete request"))
 	default:
+		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Sorry this method is not supported"))
 	}
 }
 
 func handleGetPokemon(w http.ResponseWriter, r *http.Request) error {
-	pokemon := Pokemon{
-		Number: 25,
-		Name:   "Pikachu",
+	// Checks to see if the GET request was just on "/pokemon" If not, it removes the id from the end to get a specific pokemon
+	if r.URL.Path == "/pokemon" {
+		pokemon := Pokemon{
+			Number: 25,
+			Name:   "Pikachu",
+		}
+		return WriteJSON(w, http.StatusOK, pokemon)
 	}
-	return WriteJSON(w, http.StatusOK, pokemon)
+
+	// Testing to show that I can trim the id from the URL. Using to WriteJSON to write the id response back to the client.
+	id := strings.TrimPrefix(r.URL.Path, "/pokemon/")
+	return WriteJSON(w, http.StatusOK, id)
 }
