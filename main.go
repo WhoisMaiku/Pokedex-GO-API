@@ -34,18 +34,35 @@ func WriteJSON(w http.ResponseWriter, status int, v any) error {
 	return json.NewEncoder(w).Encode(v)
 }
 
+// Enables CORS for the frontend to access the API
 func enableCors(w *http.ResponseWriter) {
-	// Enables CORS for the frontend to access the API
-	(*w).Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
+	(*w).Header().Set("Access-Control-Allow-Origin", "http://192.168.0.75:5173")
 }
 
-// Handles the incoming http requests and routes them depending on the method used.
+// Extracts the id from the URL as a string and converts it to an int
+func convertStringtoInt(urlString string) (int, error) {
+	numString := strings.TrimPrefix(urlString, "/pokemon/")
+	num, err := strconv.Atoi(numString)
+	return num, err
+}
+
+func findMaxPokemonID(db *sql.DB) int {
+	var maxID int
+	query := db.QueryRow("SELECT MAX(id) FROM pokemon;")
+	err := query.Scan(&maxID)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return maxID
+}
+
+// Handles the incoming http requests and routes them depending on the method used when querying a single pokemon.
 func handlePokemon(w http.ResponseWriter, r *http.Request) {
 	// Enables CORS
 	enableCors(&w)
 
 	// Opens the pokemon database & defers closing until the end of the function
-	db, errs := sql.Open("sqlite", "./all-pokemon.db")
+	db, errs := sql.Open("sqlite", "./test-pokemon.db")
 	if errs != nil {
 		log.Fatal(errs)
 	}
@@ -54,11 +71,11 @@ func handlePokemon(w http.ResponseWriter, r *http.Request) {
 	// Switch statement to route the request depending on the method used
 	switch r.Method {
 	case "GET":
-		handleGetPokemonByNumber(w, r, db)
+		handleGetPokemonByID(w, r, db)
 	case "POST":
 		handlePostPokemon(&w, r, db)
 	case "PATCH":
-		w.Write([]byte("This is a patch request"))
+		handleUpdatePokemon(w, r, db)
 	case "DELETE":
 		w.Write([]byte("This is a delete request"))
 	default:
@@ -67,13 +84,13 @@ func handlePokemon(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// Handles the GET request for all pokemon
+// Handles the request to GET all pokemon
 func handleGetAllPokemon(w http.ResponseWriter, r *http.Request) {
 	// Enables CORS
 	enableCors(&w)
 
 	// Opens the pokemon database & defers closing until the end of the function
-	db, errs := sql.Open("sqlite", "./all-pokemon.db")
+	db, errs := sql.Open("sqlite", "./test-pokemon.db")
 	if errs != nil {
 		log.Fatal(errs)
 	}
@@ -91,9 +108,7 @@ func handleGetAllPokemon(w http.ResponseWriter, r *http.Request) {
 
 	// Extracts the data from the query, and places it into a slice of allPokemon
 	for rows.Next() {
-
 		thisPokemon := Pokemon{}
-
 		err := rows.Scan(&thisPokemon.Id, &thisPokemon.Number, &thisPokemon.Name, &thisPokemon.Sprite)
 		if err != nil {
 			log.Fatal(err)
@@ -105,35 +120,28 @@ func handleGetAllPokemon(w http.ResponseWriter, r *http.Request) {
 }
 
 // Handles the GET request for a single pokemon
-func handleGetPokemonByNumber(w http.ResponseWriter, r *http.Request, db *sql.DB) any {
-	// Extracts the id from the URL as a string
-	numString := strings.TrimPrefix(r.URL.Path, "/pokemon/")
+func handleGetPokemonByID(w http.ResponseWriter, r *http.Request, db *sql.DB) any {
 
-	//convert idString to int id and returns bad request if it is not a number
-	num, err := strconv.Atoi(numString)
+	// Extracts the number from the URL and converts it to an int
+	id, err := convertStringtoInt(r.URL.Path)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Please enter a valid Number"))
+		w.Write([]byte("Please enter the pokemon's ID"))
 		return nil
 	}
 
 	// Gets maximum number of pokemon in database
-	var maxNumber int
-	query := db.QueryRow("SELECT MAX(number) FROM pokemon;")
-	err = query.Scan(&maxNumber)
-	if err != nil {
-		log.Fatal(err)
-	}
+	max := findMaxPokemonID(db)
 
 	// Checks if the id is valid and returns bad request if it is not
-	if num < 1 || num > maxNumber {
+	if id < 1 || id > max {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Please enter a valid Number (Between 1 and " + strconv.Itoa(maxNumber) + ")"))
+		w.Write([]byte("Please enter a valid ID (Between 1 and " + strconv.Itoa(max) + ")"))
 		return nil
 	}
 
 	// Runs the query on a single row of the database.
-	row := db.QueryRow("SELECT * FROM pokemon WHERE number=?", num)
+	row := db.QueryRow("SELECT * FROM pokemon WHERE id=?", id)
 
 	thisPokemon := Pokemon{}
 
@@ -156,8 +164,8 @@ func handlePostPokemon(w *http.ResponseWriter, r *http.Request, db *sql.DB) any 
 	}
 
 	// Checks if the pokemon already exists in the database
-	check := db.QueryRow("SELECT * FROM pokemon WHERE number=?", pokemon.Number)
-	err = check.Scan(&pokemon.Id, &pokemon.Number, &pokemon.Name, &pokemon.Sprite)
+	check := db.QueryRow("SELECT * FROM pokemon WHERE id=?", pokemon.Id)
+	err = check.Scan(&pokemon.Id, &pokemon.Number, &pokemon.Name, &pokemon.Sprite) // I think this overwrites the pokemon variable MIGHT NEED TO CHANGE
 	if err == nil {
 		(*w).WriteHeader(http.StatusBadRequest)
 		(*w).Write([]byte("Pokemon already exists"))
@@ -171,6 +179,46 @@ func handlePostPokemon(w *http.ResponseWriter, r *http.Request, db *sql.DB) any 
 		log.Fatal(err)
 	}
 
+	// Returns http status 200
+	return http.StatusOK
+}
+
+// Handles the PATCH request for a single pokemon
+func handleUpdatePokemon(w http.ResponseWriter, r *http.Request, db *sql.DB) any {
+
+	// Extracts the number from the URL and converts it to an int
+	id, err := convertStringtoInt(r.URL.Path)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Please enter the pokemon's number"))
+		return nil
+	}
+
+	// Gets maximum number of pokemon in database
+	max := findMaxPokemonID(db)
+
+	// Checks if the id is valid and returns bad request if it is not
+	if id < 1 || id > max {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Please enter a valid Number (Between 1 and " + strconv.Itoa(max) + ")"))
+		return nil
+	}
+
+	// Extracts the data from the PATCH request
+	var upPokemon Pokemon
+	errs := json.NewDecoder(r.Body).Decode(&upPokemon)
+	if errs != nil {
+		log.Fatal(err)
+	}
+
+	// Updates the pokemon in the database
+	query := fmt.Sprintf("UPDATE pokemon SET number=%d, name='%s', sprite='%s' WHERE id=%d", upPokemon.Number, upPokemon.Name, upPokemon.Sprite, id)
+	_, err = db.Exec(query)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	w.Write([]byte("Patch Request Completed"))
 	// Returns http status 200
 	return http.StatusOK
 }
