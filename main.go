@@ -24,7 +24,7 @@ type Pokemon struct {
 func main() {
 	http.HandleFunc("/pokemon", handleGetAllPokemon) // Should only be doing GET requests on this route for all pokemon
 	http.HandleFunc("/pokemon/", handlePokemon)      // Emulates "/pokemon/{id}" on a framework as this is a limitation of only using net/http
-	log.Fatal(http.ListenAndServe(":3000", nil))
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
 // Encodes data into JSON
@@ -37,6 +37,8 @@ func WriteJSON(w http.ResponseWriter, status int, v any) error {
 // Enables CORS for the frontend to access the API
 func enableCors(w *http.ResponseWriter) {
 	(*w).Header().Set("Access-Control-Allow-Origin", "http://192.168.0.75:5173")
+	(*w).Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+	(*w).Header().Set("Access-Control-Allow-Headers", "Content-Type")
 }
 
 // Extracts the id from the URL as a string and converts it to an int
@@ -78,6 +80,9 @@ func handlePokemon(w http.ResponseWriter, r *http.Request) {
 		handleUpdatePokemon(w, r, db)
 	case "DELETE":
 		w.Write([]byte("This is a delete request"))
+	case "OPTIONS":
+		w.WriteHeader(http.StatusOK)
+		enableCors(&w)
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Sorry this method is not supported"))
@@ -121,6 +126,8 @@ func handleGetAllPokemon(w http.ResponseWriter, r *http.Request) {
 
 // Handles the GET request for a single pokemon
 func handleGetPokemonByID(w http.ResponseWriter, r *http.Request, db *sql.DB) any {
+	// Enables CORS
+	enableCors(&w)
 
 	// Extracts the number from the URL and converts it to an int
 	id, err := convertStringtoInt(r.URL.Path)
@@ -185,6 +192,8 @@ func handlePostPokemon(w *http.ResponseWriter, r *http.Request, db *sql.DB) any 
 
 // Handles the PATCH request for a single pokemon
 func handleUpdatePokemon(w http.ResponseWriter, r *http.Request, db *sql.DB) any {
+	// Enables CORS
+	enableCors(&w)
 
 	// Extracts the number from the URL and converts it to an int
 	id, err := convertStringtoInt(r.URL.Path)
@@ -218,7 +227,6 @@ func handleUpdatePokemon(w http.ResponseWriter, r *http.Request, db *sql.DB) any
 		log.Fatal(err)
 	}
 
-	w.Write([]byte("Patch Request Completed"))
 	// Returns http status 200
 	return http.StatusOK
 }
