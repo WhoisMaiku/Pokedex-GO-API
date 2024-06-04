@@ -36,7 +36,7 @@ func WriteJSON(w http.ResponseWriter, status int, v any) error {
 
 // Enables CORS for the frontend to access the API
 func enableCors(w *http.ResponseWriter) {
-	(*w).Header().Set("Access-Control-Allow-Origin", "http://192.168.0.75:5173")
+	(*w).Header().Set("Access-Control-Allow-Origin", "http://192.168.0.93:5173")
 	(*w).Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 	(*w).Header().Set("Access-Control-Allow-Headers", "Content-Type")
 }
