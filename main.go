@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/monzo/terrors"
 	_ "modernc.org/sqlite"
 )
 
@@ -54,7 +55,8 @@ func findMaxPokemonID(db *sql.DB) int {
 	query := db.QueryRow("SELECT MAX(id) FROM pokemon;")
 	err := query.Scan(&maxID)
 	if err != nil {
-		log.Fatal(err)
+		err = terrors.InternalService("sql_error", "Error getting max id", map[string]string{"error": err.Error()})
+		fmt.Print(err.Error())
 	}
 	return maxID
 }
@@ -67,7 +69,8 @@ func handlePokemon(w http.ResponseWriter, r *http.Request) {
 	// Opens the pokemon database & defers closing until the end of the function
 	db, errs := sql.Open("sqlite", "./test-pokemon.db")
 	if errs != nil {
-		log.Fatal(errs)
+		errs = terrors.InternalService("sql_error", "Error opening database", map[string]string{"error": errs.Error()})
+		fmt.Print(errs.Error())
 	}
 	defer db.Close()
 
@@ -80,7 +83,7 @@ func handlePokemon(w http.ResponseWriter, r *http.Request) {
 	case "PATCH":
 		handleUpdatePokemon(w, r, db)
 	case "DELETE":
-		w.Write([]byte("This is a delete request"))
+		handleDeletePokemon(w, r, db)
 	case "OPTIONS":
 		w.WriteHeader(http.StatusOK)
 		enableCors(&w)
@@ -98,7 +101,8 @@ func handleGetAllPokemon(w http.ResponseWriter, r *http.Request) {
 	// Opens the pokemon database & defers closing until the end of the function
 	db, errs := sql.Open("sqlite", "./test-pokemon.db")
 	if errs != nil {
-		log.Fatal(errs)
+		errs = terrors.InternalService("sql_error", "Error opening database", map[string]string{"error": errs.Error()})
+		fmt.Print(errs.Error())
 	}
 	defer db.Close()
 
@@ -107,8 +111,8 @@ func handleGetAllPokemon(w http.ResponseWriter, r *http.Request) {
 	// Runs the query, and then defers closing the query until the end of the function.
 	rows, err := db.Query("SELECT * FROM pokemon;")
 	if err != nil {
-		fmt.Println("Error getting pokemon")
-		log.Fatal(err)
+		err = terrors.InternalService("sql_error", "Error getting all pokemon", map[string]string{"error": err.Error()})
+		fmt.Print(err.Error())
 	}
 	defer rows.Close()
 
@@ -117,7 +121,8 @@ func handleGetAllPokemon(w http.ResponseWriter, r *http.Request) {
 		thisPokemon := Pokemon{}
 		err := rows.Scan(&thisPokemon.Id, &thisPokemon.Number, &thisPokemon.Name, &thisPokemon.Sprite)
 		if err != nil {
-			log.Fatal(err)
+			err = terrors.InternalService("sql_error", "Error scanning rows", map[string]string{"error": err.Error()})
+			fmt.Print(err.Error())
 		}
 
 		allPokemon = append(allPokemon, thisPokemon)
@@ -156,7 +161,8 @@ func handleGetPokemonByID(w http.ResponseWriter, r *http.Request, db *sql.DB) an
 	// Scans the row and places the data into the variable thisPokemon
 	e := row.Scan(&thisPokemon.Id, &thisPokemon.Number, &thisPokemon.Name, &thisPokemon.Sprite)
 	if e != nil {
-		log.Fatal(e)
+		e = terrors.InternalService("sql_error", "Error scanning row", map[string]string{"error": e.Error()})
+		fmt.Print(e.Error())
 	}
 
 	return WriteJSON(w, http.StatusOK, thisPokemon)
@@ -168,15 +174,18 @@ func handlePostPokemon(w *http.ResponseWriter, r *http.Request, db *sql.DB) any 
 	var pokemon Pokemon
 	err := json.NewDecoder(r.Body).Decode(&pokemon)
 	if err != nil {
-		log.Fatal(err)
+		err = terrors.InternalService("json_error", "Error decoding JSON", map[string]string{"error": err.Error()})
+		fmt.Print(err.Error())
 	}
 
 	// Checks if the pokemon already exists in the database
 	check := db.QueryRow("SELECT * FROM pokemon WHERE id=?", pokemon.Id)
-	err = check.Scan(&pokemon.Id, &pokemon.Number, &pokemon.Name, &pokemon.Sprite) // I think this overwrites the pokemon variable MIGHT NEED TO CHANGE
+	err = check.Scan(&pokemon.Id, &pokemon.Number, &pokemon.Name, &pokemon.Sprite) // I think this overwrites the pokemon struct CHECK W/ SAM
 	if err == nil {
+		err = terrors.BadRequest("pokemon_exists", "Pokemon already exists", map[string]string{"pokemon_id": strconv.Itoa(pokemon.Id)})
 		(*w).WriteHeader(http.StatusBadRequest)
 		(*w).Write([]byte("Pokemon already exists"))
+		fmt.Print(err.Error())
 		return nil
 	}
 
@@ -184,7 +193,8 @@ func handlePostPokemon(w *http.ResponseWriter, r *http.Request, db *sql.DB) any 
 	query := fmt.Sprintf("INSERT INTO pokemon VALUES (%d, %d, '%s', '%s')", pokemon.Id, pokemon.Number, pokemon.Name, pokemon.Sprite)
 	_, err = db.Exec(query)
 	if err != nil {
-		log.Fatal(err)
+		err = terrors.InternalService("sql_error", "Error inserting pokemon", map[string]string{"error": err.Error()})
+		fmt.Print(err.Error())
 	}
 
 	// Returns http status 200
@@ -218,14 +228,52 @@ func handleUpdatePokemon(w http.ResponseWriter, r *http.Request, db *sql.DB) any
 	var upPokemon Pokemon
 	errs := json.NewDecoder(r.Body).Decode(&upPokemon)
 	if errs != nil {
-		log.Fatal(err)
+		errs = terrors.InternalService("json_error", "Error decoding JSON", map[string]string{"error": errs.Error()})
+		fmt.Print(errs.Error())
 	}
 
 	// Updates the pokemon in the database
 	query := fmt.Sprintf("UPDATE pokemon SET number=%d, name='%s', sprite='%s' WHERE id=%d", upPokemon.Number, upPokemon.Name, upPokemon.Sprite, id)
 	_, err = db.Exec(query)
 	if err != nil {
-		log.Fatal(err)
+		err = terrors.InternalService("sql_error", "Error updating pokemon", map[string]string{"error": err.Error()})
+		fmt.Print(err.Error())
+	}
+
+	// Returns http status 200
+	return http.StatusOK
+}
+
+func handleDeletePokemon(w http.ResponseWriter, r *http.Request, db *sql.DB) any {
+	// Enables CORS
+	enableCors(&w)
+
+	// Extracts the number from the URL and converts it to an int
+	id, err := convertStringtoInt(r.URL.Path)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Please enter the pokemon's number"))
+		return nil
+	}
+
+	// Gets maximum number of pokemon in database
+	max := findMaxPokemonID(db)
+
+	// Checks if the id is valid
+	if id < 1 || id > max {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("Please enter a valid Number (Between 1 and " + strconv.Itoa(max) + ")"))
+		return nil
+	}
+
+	// Deletes the pokemon from the database
+	query := fmt.Sprintf("DELETE FROM pokemon WHERE id=%d", id)
+	_, err = db.Exec(query)
+	if err != nil {
+		err = terrors.InternalService("sql_error", "Error deleting pokemon", map[string]string{"error": err.Error()})
+		fmt.Print(err.Error())
+		(w).WriteHeader(http.StatusInternalServerError)
+		return nil
 	}
 
 	// Returns http status 200
