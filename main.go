@@ -50,13 +50,14 @@ func convertStringtoInt(urlString string) (int, error) {
 	return num, err
 }
 
-func findMaxPokemonID(db *sql.DB) int {
+func findMaxPokemonID(db *sql.DB) any {
 	var maxID int
 	query := db.QueryRow("SELECT MAX(id) FROM pokemon;")
 	err := query.Scan(&maxID)
 	if err != nil {
 		err = terrors.InternalService("sql_error", "Error getting max id", map[string]string{"error": err.Error()})
 		fmt.Print(err.Error())
+		return nil
 	}
 	return maxID
 }
