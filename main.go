@@ -50,13 +50,13 @@ func convertStringtoInt(urlString string) (int, error) {
 	return num, err
 }
 
-func findMaxPokemonID(db *sql.DB) any {
+func findMaxPokemonID(db *sql.DB) any { // Update this to return the max id as an int & error default to 0 if an error occurs
 	var maxID int
 	query := db.QueryRow("SELECT MAX(id) FROM pokemon;")
 	err := query.Scan(&maxID)
 	if err != nil {
-		err = terrors.InternalService("sql_error", "Error getting max id", map[string]string{"error": err.Error()})
-		fmt.Print(err.Error())
+		err = terrors.Augment(err, "Error getting max id", nil)
+		fmt.Print(err.Error()) // Do I want to log this here, or return the error to the caller and the caller and choose if they want to log the error? - In Monzo we would return the error to the caller and let them decide.
 		return nil
 	}
 	return maxID
@@ -70,7 +70,7 @@ func handlePokemon(w http.ResponseWriter, r *http.Request) {
 	// Opens the pokemon database & defers closing until the end of the function
 	db, errs := sql.Open("sqlite", "./test-pokemon.db")
 	if errs != nil {
-		errs = terrors.InternalService("sql_error", "Error opening database", map[string]string{"error": errs.Error()})
+		errs = terrors.Augment(errs, "Error opening database", nil)
 		fmt.Print(errs.Error())
 	}
 	defer db.Close()
@@ -176,19 +176,20 @@ func handlePostPokemon(w *http.ResponseWriter, r *http.Request, db *sql.DB) any 
 	var pokemon Pokemon
 	err := json.NewDecoder(r.Body).Decode(&pokemon)
 	if err != nil {
-		err = terrors.InternalService("json_error", "Error decoding JSON", map[string]string{"error": err.Error()})
-		fmt.Print(err.Error())
+		err = terrors.BadRequest("json_error", "Error decoding JSON", nil) //Change this to a bad request error.
+		fmt.Print(err.Error())                                             // This is useful for testing, but in production we wouldn't log the error here, we would return the error to the client.
 	}
 
 	// Checks if the pokemon already exists in the database
+	var checkPokemonExists Pokemon
 	check := db.QueryRow("SELECT * FROM pokemon WHERE id=?", pokemon.Id)
-	err = check.Scan(&pokemon.Id, &pokemon.Number, &pokemon.Name, &pokemon.Sprite) // I think this overwrites the pokemon struct CHECK W/ SAM
+	err = check.Scan(&checkPokemonExists.Id, &checkPokemonExists.Number, &checkPokemonExists.Name, &checkPokemonExists.Sprite) // Can I make this more simple? - Do we need to scan here?
 	if err == nil {
 		err = terrors.BadRequest("pokemon_exists", "Pokemon already exists", map[string]string{"pokemon_id": strconv.Itoa(pokemon.Id)})
 		(*w).WriteHeader(http.StatusBadRequest)
 		(*w).Write([]byte("Pokemon already exists"))
 		fmt.Print(err.Error())
-		return nil
+		return err.Error()
 	}
 
 	// Adds the pokemon to the database
