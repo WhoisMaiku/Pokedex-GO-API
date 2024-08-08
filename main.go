@@ -145,13 +145,16 @@ func handleGetPokemonByID(w http.ResponseWriter, r *http.Request, db *sql.DB) an
 	}
 
 	// Gets maximum number of pokemon in database
-	max := findMaxPokemonID(db)
-	maxInt := max.(int)
+	max, err := findMaxPokemonID(db)
+	if err != nil {
+		err = terrors.Augment(err, "Error getting max id", nil)
+		return err.Error()
+	}
 
 	// Checks if the id is valid and returns bad request if it is not
-	if id < 1 || id > maxInt {
+	if id < 1 || id > max {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Please enter a valid ID (Between 1 and " + strconv.Itoa(maxInt) + ")"))
+		w.Write([]byte("Please enter a valid ID (Between 1 and " + strconv.Itoa(max) + ")"))
 		return nil
 	}
 
@@ -217,13 +220,16 @@ func handleUpdatePokemon(w http.ResponseWriter, r *http.Request, db *sql.DB) any
 	}
 
 	// Gets maximum number of pokemon in database
-	max := findMaxPokemonID(db)
-	maxInt := max.(int)
+	max, err := findMaxPokemonID(db)
+	if err != nil {
+		err = terrors.Augment(err, "Error getting max id", nil)
+		return err.Error()
+	}
 
 	// Checks if the id is valid and returns bad request if it is not
-	if id < 1 || id > maxInt {
+	if id < 1 || id > max {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Please enter a valid Number (Between 1 and " + strconv.Itoa(maxInt) + ")"))
+		w.Write([]byte("Please enter a valid Number (Between 1 and " + strconv.Itoa(max) + ")"))
 		return nil
 	}
 
@@ -260,13 +266,16 @@ func handleDeletePokemon(w http.ResponseWriter, r *http.Request, db *sql.DB) any
 	}
 
 	// Gets maximum number of pokemon in database
-	max := findMaxPokemonID(db)
-	maxInt := max.(int)
+	max, err := findMaxPokemonID(db)
+	if err != nil {
+		err = terrors.Augment(err, "Error getting max id", nil)
+		return err.Error()
+	}
 
 	// Checks if the id is valid
-	if id < 1 || id > maxInt {
+	if id < 1 || id > max {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Please enter a valid Number (Between 1 and " + strconv.Itoa(maxInt) + ")"))
+		w.Write([]byte("Please enter a valid Number (Between 1 and " + strconv.Itoa(max) + ")"))
 		return nil
 	}
 
