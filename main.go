@@ -92,10 +92,11 @@ func handlePokemon(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Sorry this method is not supported"))
 	}
+
 }
 
 // Handles the request to GET all pokemon
-func handleGetAllPokemon(w http.ResponseWriter, r *http.Request) {
+func handleGetAllPokemon(w http.ResponseWriter, r *http.Request) ([]Pokemon, error) {
 	// Enables CORS
 	enableCors(&w)
 
@@ -103,7 +104,7 @@ func handleGetAllPokemon(w http.ResponseWriter, r *http.Request) {
 	db, errs := sql.Open("sqlite", "./test-pokemon.db")
 	if errs != nil {
 		errs = terrors.Augment(errs, "Error opening database", nil)
-		fmt.Print(errs.Error())
+		return errs.Error()
 	}
 	defer db.Close()
 
@@ -132,23 +133,22 @@ func handleGetAllPokemon(w http.ResponseWriter, r *http.Request) {
 }
 
 // Handles the GET request for a single pokemon
-func handleGetPokemonByID(w http.ResponseWriter, r *http.Request, db *sql.DB) any {
+func handleGetPokemonByID(w http.ResponseWriter, r *http.Request, db *sql.DB) (Pokemon, error) {
 	// Enables CORS
 	enableCors(&w)
 
 	// Extracts the number from the URL and converts it to an int
 	id, err := convertStringtoInt(r.URL.Path)
 	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Please enter the pokemon's ID"))
-		return nil
+		err = terrors.Augment(err, "Error converting string to int", nil)
+		return Pokemon{}, err
 	}
 
 	// Gets maximum number of pokemon in database
 	max, err := findMaxPokemonID(db)
 	if err != nil {
 		err = terrors.Augment(err, "Error getting max id", nil)
-		return err.Error()
+		return err
 	}
 
 	// Checks if the id is valid and returns bad request if it is not
