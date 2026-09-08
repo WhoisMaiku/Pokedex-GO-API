@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -23,6 +24,10 @@ type Pokemon struct {
 
 // Added log.Fatal so that it sends an error if the server crashes
 func main() {
+	if origin := os.Getenv("ALLOWED_ORIGIN"); origin != "" {
+		allowedOrigin = origin
+	}
+
 	http.HandleFunc("/pokemon", handleGetAllPokemon) // Should only be doing GET requests on this route for all pokemon
 	http.HandleFunc("/pokemon/", handlePokemon)      // Emulates "/pokemon/{id}" on a framework as this is a limitation of only using net/http
 	log.Fatal(http.ListenAndServe(":8080", nil))
@@ -35,10 +40,12 @@ func WriteJSON(w http.ResponseWriter, status int, v any) error {
 	return json.NewEncoder(w).Encode(v)
 }
 
+// allowedOrigin can be overridden with the ALLOWED_ORIGIN env var; defaults to the frontend's local dev server
+var allowedOrigin = "http://localhost:5173"
+
 // Enables CORS for the frontend to access the API
 func enableCors(w *http.ResponseWriter) {
-	ipAddress := "10.2.15.139"
-	(*w).Header().Set("Access-Control-Allow-Origin", "http://"+ipAddress+":5173")
+	(*w).Header().Set("Access-Control-Allow-Origin", allowedOrigin)
 	(*w).Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 	(*w).Header().Set("Access-Control-Allow-Headers", "Content-Type")
 }

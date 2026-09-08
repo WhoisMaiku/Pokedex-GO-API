@@ -60,4 +60,4 @@ CREATE TABLE pokemon (
 
 ## Notes
 
-- CORS is currently configured to allow requests only from a hardcoded local IP (`enableCors` in `main.go`) — update this to match your frontend's origin if running locally.
+- CORS defaults to allowing requests from `http://localhost:5173` (`enableCors` in `main.go`). To allow a different origin, set the `ALLOWED_ORIGIN` environment variable before starting the server, e.g. `ALLOWED_ORIGIN=http://localhost:3000 go run main.go`.
