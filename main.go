@@ -96,7 +96,7 @@ func handlePokemon(w http.ResponseWriter, r *http.Request) {
 }
 
 // Handles the request to GET all pokemon
-func handleGetAllPokemon(w http.ResponseWriter, r *http.Request) ([]Pokemon, error) {
+func handleGetAllPokemon(w http.ResponseWriter, r *http.Request) {
 	// Enables CORS
 	enableCors(&w)
 
@@ -104,7 +104,9 @@ func handleGetAllPokemon(w http.ResponseWriter, r *http.Request) ([]Pokemon, err
 	db, errs := sql.Open("sqlite", "./test-pokemon.db")
 	if errs != nil {
 		errs = terrors.Augment(errs, "Error opening database", nil)
-		return errs.Error()
+		fmt.Print(errs.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	defer db.Close()
 
@@ -115,6 +117,8 @@ func handleGetAllPokemon(w http.ResponseWriter, r *http.Request) ([]Pokemon, err
 	if err != nil {
 		err = terrors.Augment(err, "Error getting all pokemon", nil)
 		fmt.Print(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 	defer rows.Close()
 
@@ -133,7 +137,7 @@ func handleGetAllPokemon(w http.ResponseWriter, r *http.Request) ([]Pokemon, err
 }
 
 // Handles the GET request for a single pokemon
-func handleGetPokemonByID(w http.ResponseWriter, r *http.Request, db *sql.DB) (Pokemon, error) {
+func handleGetPokemonByID(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 	// Enables CORS
 	enableCors(&w)
 
@@ -141,21 +145,25 @@ func handleGetPokemonByID(w http.ResponseWriter, r *http.Request, db *sql.DB) (P
 	id, err := convertStringtoInt(r.URL.Path)
 	if err != nil {
 		err = terrors.Augment(err, "Error converting string to int", nil)
-		return Pokemon{}, err
+		fmt.Print(err.Error())
+		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
 
 	// Gets maximum number of pokemon in database
 	max, err := findMaxPokemonID(db)
 	if err != nil {
 		err = terrors.Augment(err, "Error getting max id", nil)
-		return err
+		fmt.Print(err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	// Checks if the id is valid and returns bad request if it is not
 	if id < 1 || id > max {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Please enter a valid ID (Between 1 and " + strconv.Itoa(max) + ")"))
-		return nil
+		return
 	}
 
 	// Runs the query on a single row of the database.
@@ -170,7 +178,7 @@ func handleGetPokemonByID(w http.ResponseWriter, r *http.Request, db *sql.DB) (P
 		fmt.Print(e.Error())
 	}
 
-	return WriteJSON(w, http.StatusOK, thisPokemon)
+	WriteJSON(w, http.StatusOK, thisPokemon)
 }
 
 // Handles the POST request for a single pokemon
@@ -195,8 +203,7 @@ func handlePostPokemon(w *http.ResponseWriter, r *http.Request, db *sql.DB) any 
 	}
 
 	// Adds the pokemon to the database
-	query := fmt.Sprintf("INSERT INTO pokemon VALUES (%d, %d, '%s', '%s')", pokemon.Id, pokemon.Number, pokemon.Name, pokemon.Sprite)
-	_, err = db.Exec(query)
+	_, err = db.Exec("INSERT INTO pokemon VALUES (?, ?, ?, ?)", pokemon.Id, pokemon.Number, pokemon.Name, pokemon.Sprite)
 	if err != nil {
 		err = terrors.Augment(err, "Error inserting pokemon", nil)
 		fmt.Print(err.Error())
@@ -242,8 +249,7 @@ func handleUpdatePokemon(w http.ResponseWriter, r *http.Request, db *sql.DB) any
 	}
 
 	// Updates the pokemon in the database
-	query := fmt.Sprintf("UPDATE pokemon SET number=%d, name='%s', sprite='%s' WHERE id=%d", upPokemon.Number, upPokemon.Name, upPokemon.Sprite, id)
-	_, err = db.Exec(query)
+	_, err = db.Exec("UPDATE pokemon SET number=?, name=?, sprite=? WHERE id=?", upPokemon.Number, upPokemon.Name, upPokemon.Sprite, id)
 	if err != nil {
 		err = terrors.Augment(err, "Error updating pokemon", nil)
 		fmt.Print(err.Error())
@@ -280,8 +286,7 @@ func handleDeletePokemon(w http.ResponseWriter, r *http.Request, db *sql.DB) any
 	}
 
 	// Deletes the pokemon from the database
-	query := fmt.Sprintf("DELETE FROM pokemon WHERE id=%d", id)
-	_, err = db.Exec(query)
+	_, err = db.Exec("DELETE FROM pokemon WHERE id=?", id)
 	if err != nil {
 		err = terrors.Augment(err, "Error deleting pokemon", map[string]string{"Pokemon ID": strconv.Itoa(id)})
 		fmt.Print(err.Error())
